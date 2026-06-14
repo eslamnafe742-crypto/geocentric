@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 # Find gears that share common axles
+# For epicyclic gears the ratios are all weird!
+#
+# For a fixed sun and driven carrier, ws=0 wc=1
+# Note that since the planet is being used for a reversing gear,
+# we only care about the ring gear speed
+# wr = (Ns1 + Nr1) / Nr1 * wc - Ns1 / Nr1 * ws
+# wr = (Ns1 + Nr1) / Nr1
+#
+# Second stage is a driven planet and carrier
+# Ns2*ws2 + Np2*wp - (Ns2 + Np2)*wc = 0
+# ws = ((Ns2 + Np2) - Np2*wp) / Ns
+#
 from math import fabs
-max_total_teeth = 50
-min_teeth = 8
+max_total_teeth = 100
+min_teeth = 12
 
 target = (360 - (360 / 29.5306)) / 360
 print(target)
@@ -10,14 +22,29 @@ print(target)
 
 
 for total_teeth in range(min_teeth*2, max_total_teeth):
-	for t1 in range(min_teeth, total_teeth - min_teeth):
-		t2 = total_teeth - t1
-		ra = t1 / t2
+	for ns1 in range(min_teeth, total_teeth - min_teeth):
+		# this first epicyclic gear has a fixed sun,
+		# and driven carrier
 
-		for t3 in range(min_teeth, total_teeth - min_teeth):
-			t4 = total_teeth - t3
-			rb = t4 / t3
+		# intermediate gear
+		for np1 in range(min_teeth, total_teeth - min_teeth - ns1):
+			nr1 = total_teeth - 2*np1 - ns1
+			if nr1< min_teeth:
+				continue
 
-			r = ra * rb
-			print("%.6f %.6f %3d %3d+%3d %3d+%3d" % (fabs(target - r), r, total_teeth, t1, t2, t3, t4))
+			# np1 does not enter into gear ratio
+			# since the the "ring gear" is driving
+			# the next stage
+			wp = (ns1 + nr1) / nr1
+
+			for np2 in range(min_teeth, total_teeth - min_teeth):
+				# this is a *second* epicyclic set,
+				# but the planet and carrier are both driven,
+				# so we want to compute it's sun gear speed
+				# assume carrier speed wc = 1
+				# wp = ra
+				ns2 = total_teeth - np2
+				ws2 = (ns2 + np2 - np2 * wp) / ns2
+
+				print("%.6f %.6f %.6f %3d | %3d %3d %3d | %3d %3d" % (fabs(target - ws2), ws2, wp, total_teeth, ns1, np1, nr1, ns2, np2))
 			
