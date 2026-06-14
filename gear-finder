@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+# Find gears that share common axles
+from math import fabs
+max_total_teeth = 50
+min_teeth = 8
+
+target = (360 - (360 / 29.5306)) / 360
+print(target)
+
+
+
+for total_teeth in range(min_teeth*2, max_total_teeth):
+	for t1 in range(min_teeth, total_teeth - min_teeth):
+		t2 = total_teeth - t1
+		ra = t1 / t2
+
+		for t3 in range(min_teeth, total_teeth - min_teeth):
+			t4 = total_teeth - t3
+			rb = t4 / t3
+
+			r = ra * rb
+			print("%.6f %.6f %3d %3d+%3d %3d+%3d" % (fabs(target - r), r, total_teeth, t1, t2, t3, t4))
+			
