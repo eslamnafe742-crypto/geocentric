@@ -10,7 +10,7 @@
 #
 # Second stage is a driven planet and carrier
 # Ns2*ws2 + Np2*wp - (Ns2 + Np2)*wc = 0
-# ws = ((Ns2 + Np2) - Np2*wp) / Ns
+# ws = ((Ns2 + Np2)*wc - Np2*wp) / Ns
 #
 from math import fabs
 max_total_teeth = 100
@@ -19,6 +19,8 @@ min_teeth = 12
 target = (360 - (360 / 29.5306)) / 360
 print(target)
 
+wc1 = 1
+wc2 = wc1 # it goes backwards from the perspective of the lpanetary gear
 
 
 for total_teeth in range(min_teeth*2, max_total_teeth):
@@ -35,16 +37,17 @@ for total_teeth in range(min_teeth*2, max_total_teeth):
 			# np1 does not enter into gear ratio
 			# since the the "ring gear" is driving
 			# the next stage
-			wp = (ns1 + nr1) / nr1
+			#wp = (ns1 + nr1) / nr1 * wc1
+			wp = ns1 / nr1 * wc1
 
 			for np2 in range(min_teeth, total_teeth - min_teeth):
 				# this is a *second* epicyclic set,
 				# but the planet and carrier are both driven,
 				# so we want to compute it's sun gear speed
-				# assume carrier speed wc = 1
+				# assume carrier speed wc = -1
 				# wp = ra
 				ns2 = total_teeth - np2
-				ws2 = (ns2 + np2 - np2 * wp) / ns2
+				ws2 = ((ns2 + np2) * wc2 - np2 * wp) / ns2
 
 				print("%.6f %.6f %.6f %3d | %3d %3d %3d | %3d %3d" % (fabs(target - ws2), ws2, wp, total_teeth, ns1, np1, nr1, ns2, np2))
 			
