@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+# Find gears that share common axles
+# For epicyclic gears the ratios are all weird!
+# BUT none of this matters...
+#
+# no reverser since we want to subtract from the already moving carrier
+#
+# Stage one is simple math: wp1 = ns1 / np1 (small sun, big planet)
+# Stage two is also simple: ws2 = 1 - np2 / ns2 * wp1
+#
+from math import fabs
+import sys
+max_total_teeth = 150
+min_teeth = 12
+
+target1 = 1.0 / (779.9 - 365) # Mars (slowest of all)
+target2 = 1.0 / (398.9 - 365) # Jupiter
+
+moon_teeth = 119
+planet_teeth = 135
+# Assist from the first stage of venus
+gears = [19, 17, 27, 65]
+ws0 = 1
+for gear in gears:
+	ws0 *= gear / (moon_teeth - gear)
+
+print("target=%.6f %.6f ws0=%.6f" % (target1, target2, ws0), file=sys.stderr)
+
+for mars_teeth in range(min_teeth, planet_teeth - min_teeth):
+	mars_cake_teeth = planet_teeth - mars_teeth
+
+	for reverser_teeth in range(min_teeth, moon_teeth - mars_cake_teeth - 2*min_teeth):
+		reducer_teeth = moon_teeth - 2 * reverser_teeth - mars_cake_teeth
+		if reducer_teeth < min_teeth:
+			continue
+
+		# the reverser and cake do not matter
+		mars_ratio = ws0 * reducer_teeth / mars_teeth
+		err = fabs(target1 - mars_ratio)
+
+		# jupiter is actually a step up!
+		jupiter_ws = ws0 * reducer_teeth / mars_cake_teeth
+		jupiter_ratio_ideal = jupiter_ws / target2
+
+		jupiter_teeth = int(planet_teeth / (jupiter_ratio_ideal + 1) + 0.5)
+		#if jupiter_teeth > planet_teeth - min_teeth \
+		#or jupiter_teeth < min_teeth:
+			#continue
+		jupiter_ratio = jupiter_ws * jupiter_teeth / (planet_teeth - jupiter_teeth)
+		err += fabs(target2 - jupiter_ratio)
+
+		print("%.6f %d %d %d %d %d %d %.2f %.2f" % (err, reducer_teeth, reverser_teeth, mars_cake_teeth, mars_teeth, jupiter_teeth, planet_teeth - jupiter_teeth, 365 + 1/mars_ratio, 365 + 1/jupiter_ratio))

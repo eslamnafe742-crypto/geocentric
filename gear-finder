@@ -9,11 +9,14 @@
 # Stage two is also simple: ws2 = 1 - np2 / ns2 * wp1
 #
 from math import fabs
-max_total_teeth = 100
+import sys
+max_total_teeth = 150
 min_teeth = 12
 
-target = 1 - (360 - (360 / 29.5306)) / 360
-print(target)
+#target = 1 - (360 - (360 / 29.5306)) / 360
+target = 1.0 / 29.5306  # Moon
+#target = 1.0 / 115.88 / 0.19 # Venus, with an assist from moon first stage
+print("target=%.6f" % (target), file=sys.stderr)
 
 wc1 = 1
 wc2 = wc1 # it goes backwards from the perspective of the lpanetary gear
@@ -35,6 +38,15 @@ for total_teeth in range(min_teeth*2, max_total_teeth):
 			# the next stage
 			#wp = (ns1 + nr1) / nr1 * wc1
 			wp = ns1 / np1 * wc1
+
+			# check to see if the range is even reachable
+			max_ratio = wp * (total_teeth - 2*min_teeth) / min_teeth
+			min_ratio = wp * min_teeth / (total_teeth - 2*min_teeth)
+		
+			if target < min_ratio or target > max_ratio:
+				#print("%d %d %d: not achievable %.3f %.3f" % (total_teeth, ns1, np1, min_ratio, max_ratio), file=sys.stderr)
+				continue
+
 
 			for np2 in range(min_teeth, total_teeth - min_teeth):
 				# this is a *second* epicyclic set,

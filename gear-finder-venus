@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# Find gears that share common axles
+# For epicyclic gears the ratios are all weird!
+# BUT none of this matters...
+#
+# no reverser since we want to subtract from the already moving carrier
+#
+# Stage one is simple math: wp1 = ns1 / np1 (small sun, big planet)
+# Stage two is also simple: ws2 = 1 - np2 / ns2 * wp1
+#
+from math import fabs
+import sys
+max_total_teeth = 150
+min_teeth = 12
+
+#target = 1 - (360 - (360 / 29.5306)) / 360
+target1 = 1.0 / 115.88 # Mercury
+target2 = 1.0 / 583.90 #  Venus
+print("target=%.6f %.6f" % (target1, target2), file=sys.stderr)
+
+moon_teeth = 119
+ws0 = 19 / 100.0 # Assist from the first stage of the moon
+
+for moon1_teeth in range(min_teeth, 25):
+	ws1 = ws0 * moon1_teeth / (moon_teeth - moon1_teeth)
+
+	for reduction_teeth in range(min_teeth, moon_teeth - min_teeth):
+		ws2 = ws1 * reduction_teeth / (moon_teeth - reduction_teeth)
+
+		for total_teeth in range(min_teeth*2, max_total_teeth):
+			# now compute the best integers for
+			# the takeoffs that drive mercury and venus
+			#p1 = int(total_teeth * ws2 / (ws2 + target1) + 0.5)
+			#p2 = int(total_teeth * ws2 / (ws2 + target2) + 0.5)
+			p1 = int(total_teeth * target1 / (ws2 + target1) + 0.5)
+			p2 = int(total_teeth * target2 / (ws2 + target2) + 0.5)
+
+			#print("%d %d %d %d %.6f" % (ns1, np1, ns2, np2, ws2))
+	#		if p1 < min_teeth or p2 < min_teeth \
+	#		or p1 >= total_teeth or p2 >= total_teeth: \
+	#			continue
+
+			wp1 = p1 * ws2 / (total_teeth - p1)
+			wp2 = p2 * ws2 / (total_teeth - p2)
+			err = fabs(wp1 - target1) + fabs(wp2 - target2)
+
+			print("%.6f m=%3d r=%3d t=%3d | %3d %3d | %.6f %.6f" % (err, moon1_teeth, reduction_teeth, total_teeth, p1, p2, wp1, wp2))
+				
