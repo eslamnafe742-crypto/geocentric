@@ -13,18 +13,19 @@ import sys
 max_total_teeth = 150
 min_teeth = 12
 
-target1 = 1.0 / (779.9 - 365) # Mars (slowest of all)
-target2 = 1.0 / (398.9 - 365) # Jupiter
+target1 =  (779.9) # Mars (slowest of all)
+target2 =  (398.9) # Jupiter
+target3 =  (378.1) # Saturn
 
 moon_teeth = 119
 planet_teeth = 135
-# Assist from the first stage of venus
+# Assist from the first stage of venus (65) or mercury (21)
 gears = [19, 17, 27, 65]
 ws0 = 1
 for gear in gears:
 	ws0 *= gear / (moon_teeth - gear)
 
-print("target=%.6f %.6f ws0=%.6f" % (target1, target2, ws0), file=sys.stderr)
+print("target=%.6f %.6f ws0=%.6f" % (target1, target2, 1/ws0), file=sys.stderr)
 
 for mars_teeth in range(min_teeth, planet_teeth - min_teeth):
 	mars_cake_teeth = planet_teeth - mars_teeth
@@ -36,17 +37,23 @@ for mars_teeth in range(min_teeth, planet_teeth - min_teeth):
 
 		# the reverser and cake do not matter
 		mars_ratio = ws0 * reducer_teeth / mars_teeth
-		err = fabs(target1 - mars_ratio)
+		err = fabs(target1 - 1/mars_ratio)
 
 		# jupiter is actually a step up!
 		jupiter_ws = ws0 * reducer_teeth / mars_cake_teeth
-		jupiter_ratio_ideal = jupiter_ws / target2
+		jupiter_ratio_ideal = jupiter_ws * target2
 
 		jupiter_teeth = int(planet_teeth / (jupiter_ratio_ideal + 1) + 0.5)
 		#if jupiter_teeth > planet_teeth - min_teeth \
 		#or jupiter_teeth < min_teeth:
 			#continue
 		jupiter_ratio = jupiter_ws * jupiter_teeth / (planet_teeth - jupiter_teeth)
-		err += fabs(target2 - jupiter_ratio)
+		err += fabs(target2 - 1/jupiter_ratio)
 
-		print("%.6f %d %d %d %d %d %d %.2f %.2f" % (err, reducer_teeth, reverser_teeth, mars_cake_teeth, mars_teeth, jupiter_teeth, planet_teeth - jupiter_teeth, 365 + 1/mars_ratio, 365 + 1/jupiter_ratio))
+		print("%.6f %d %d %d %d %d %d %.2f %.2f" % (
+			err,
+			reducer_teeth,
+			reverser_teeth,
+			mars_cake_teeth, mars_teeth,
+			jupiter_teeth, planet_teeth - jupiter_teeth,
+			 1/mars_ratio,  1/jupiter_ratio))
