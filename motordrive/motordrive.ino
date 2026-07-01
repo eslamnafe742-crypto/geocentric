@@ -1,3 +1,6 @@
+/*
+ * Use the wheel mode to generate very low speed rotations.
+ */
 #include <SCServo.h>
 
 // Define the correct serial port for your target board
@@ -14,132 +17,140 @@
 #define S_RXD D7
 #define S_TXD D6
 
-#define SERVO_NUM 2 // Number of servos
-
 SMS_STS st; // Servo control object
 
-// --- Servo Configuration ---
-byte ID[SERVO_NUM] = {1, 2};                // IDs of the servos
-u16 Speed[SERVO_NUM] = {1500, 1500};         // Set a medium speed for the servos
-byte ACC[SERVO_NUM] = {50, 50};             // Set a medium acceleration for the servos
-s16 Pos[SERVO_NUM] = {2048, 2048};           // Servo position array, initialized to the midpoint (2048)
+const int servo_id = 1;
+int running = 0;
+int speed = 500;
+
+void servo_stop()
+{
+	running = 0;
+	st.writeByte(servo_id, SMS_STS_MODE, 0);
+}
+void servo_start()
+{
+	running = 1;
+	st.writeByte(servo_id, SMS_STS_MODE, 1);
+	st.WriteSpe(servo_id, speed);
+}
+
+unsigned servo_pos()
+{
+	return st.ReadPos(servo_id);
+}
+
+int servo_delta(short target, short current)
+{
+	// distances of more than 180 degrees wrap around
+	// to the other direction
+	int delta = target - current;
+	if (delta < -2048)
+		delta += 4096;
+	if (delta > +2048)
+		delta -= 4096;
+
+	return delta;
+}
+
+unsigned long last_micros = 0;
+unsigned long update_usec = 1000000; // 1 Hz
+//float update_steps = 4096.0 / 60; // 1 RPM
+float update_steps = 4096.0 / (20*60); // 1 rev every 20 minutes
+float target_steps = 0;
+
 
 void setup()
 {
-  // Start the main serial port for debugging and receiving commands
-  Serial.begin(115200);
-  // Wait a moment for the Serial Monitor to connect
-  delay(2000); 
-  Serial.println("--- Servo Control Program Start ---");
+	Serial.begin(115200);
+	delay(2000); 
+	Serial.println("--- Servo Control Program Start ---");
 
-  // Start the serial port for controlling the servos
-  COMSerial.begin(1000000, SERIAL_8N1);
-  st.pSerial = &COMSerial; // Associate the control object with the serial port
+	// Start the serial port for controlling the servos
+	COMSerial.begin(1000000, SERIAL_8N1);
+	st.pSerial = &COMSerial; // Associate the control object with the serial port
   
-  Serial.println("Checking servo connection status...");
-  for (int i = 0; i < SERVO_NUM; i++) {
-    if (st.Ping(ID[i]) != -1) {
-      Serial.print("Servo with ID ");
-      Serial.print(ID[i]);
-      Serial.println(" is connected.");
-     st.writeByte(i, SMS_STS_MODE, 0);
-      Serial.println(st.ReadPos(i));
-      } else {
-      Serial.print("Error: Servo with ID ");
-      Serial.print(ID[i]);
-      Serial.println(" is not responding!");
-    }
-  }
-/*
-  // --- Power-on Self-Test ---
-  // This section makes the servos move automatically on power-up to confirm they are working correctly.
-  Serial.println("\nExecuting power-on self-test movement...");
-  // 1. Move to position 1024
-  Serial.println("Moving to position 1024...");
-  for(int i=0; i<SERVO_NUM; i++) {
-    Pos[i] = 1024;
-  }
-  st.SyncWritePosEx(ID, SERVO_NUM, Pos, Speed, ACC);
-  delay(2000); // Wait for the movement to complete
+	Serial.println("Checking servo connection status...");
+	if (st.Ping(1) == -1)
+		Serial.println("No servo found?");
 
-  // 2. Move to position 3072
-  Serial.println("Moving to position 3072...");
-  for(int i=0; i<SERVO_NUM; i++) {
-    Pos[i] = 3072;
-  }
-  st.SyncWritePosEx(ID, SERVO_NUM, Pos, Speed, ACC);
-  delay(2000); // Wait for the movement to complete
-
-  // 3. Return to center position (2048) to prepare for user commands
-  Serial.println("Returning to center position (2048)...");
-  for(int i=0; i<SERVO_NUM; i++) {
-    Pos[i] = 2048;
-  }
-  st.SyncWritePosEx(ID, SERVO_NUM, Pos, Speed, ACC);
-  delay(1500);
-
-  Serial.println("\n--- Initialization Complete ---");
-  Serial.println("Enter 'j' to decrease the angle, or 'k' to increase it.");
-  Serial.println("-----------------------------------");
-  */
-  //st.WheelMode(1);
-  //st.WriteSpe(1, 100);     
-  st.writeByte(1, SMS_STS_MODE, 0);
+	servo_stop();
+	target_steps = servo_pos();
+	Serial.println(target_steps);
+	last_micros = micros();
 }
+
+void process_input()
+{
+	String input = Serial.readString();
+	input.trim(); // Remove extra spaces or newlines
+
+	if (('0' <= input[0] && input[0] <= '9') || input[0] == '-') {
+		int value = input.toInt();
+		Serial.print("speed ");
+		Serial.println(value);
+		update_steps = value;
+	} else {
+		Serial.println("unable to parse speed");
+	}
+}
+
 
 void loop()
 {
-  // Check if the user has sent a command via the Serial Monitor
-  if (Serial.available()) {
-    String input = Serial.readString();
-    input.trim(); // Remove extra spaces or newlines
+	const unsigned current_steps = servo_pos();
+	const unsigned long now = micros();
+	const unsigned long dt = now - last_micros;
 
-    bool shouldMove = false; // Flag to indicate if a valid command was received
+	int delta = servo_delta(target_steps, current_steps);
+	if (running)
+	{
+		// don't process any input while we are running
+		// stop once we are close to our target
+		if (delta > 0)
+			return;
 
-    if (input.startsWith("j")) {
-      Serial.println("Received command: 'j'. Decreasing angle.");
-      for (int i = 0; i < SERVO_NUM; i++) {
-        Pos[i] -= 512; // Move a small step for easy observation
-        if (Pos[i] < 0) {
-          Pos[i] = 0; // Prevent going below the minimum range
-        }
-      }
-      shouldMove = true;
-    } else if (input.startsWith("k")) {
-      Serial.println("Received command: 'k'. Increasing angle.");
-      for (int i = 0; i < SERVO_NUM; i++) {
-        Pos[i] += 512; // Move a small step
-        if (Pos[i] > 4095) {
-          Pos[i] = 4095; // Prevent going above the maximum range
-        }
-      }
-      shouldMove = true;
-    } else if (input.startsWith("?")) {
-      for(int i = 0 ; i < SERVO_NUM ; i++)
-        Serial.println(st.ReadPos(i+1));
-    } else if (('0' <= input[0] && input[0] <= '9') || input[0] == '-') {
-      int value = input.toInt();
-      Serial.print("speed ");
-      Serial.println(value);
-      st.WheelMode(1);
-      st.WriteSpe(1, value);
-      //st.WritePosEx(1, (short) value, 1500, 50); // medium speed, medium acc
-      } else {
-      Serial.print("Unknown command: '");
-      Serial.print(input);
-      Serial.println("'. Please enter 'j' or 'k'.");
-    }
+		servo_stop();
+		Serial.print((int)target_steps);
+		Serial.print(" - ");
+		Serial.print(current_steps);
+		Serial.print(" = ");
+		Serial.print(delta);
+		Serial.print(" (");
+		Serial.print(dt);
+		Serial.println(")");
+	}
 
-    // If a valid command was received, send the new positions to the servos
-    if (shouldMove) {
-      Serial.print("Moving servos to new positions: [");
-      for(int i = 0; i < SERVO_NUM; i++){
-        Serial.print(Pos[i]);
-        if(i < SERVO_NUM - 1) Serial.print(", ");
-      }
-      Serial.println("]");
-      
-      st.SyncWritePosEx(ID, SERVO_NUM, Pos, Speed, ACC);
-    }
-  }
+	if (Serial.available())
+		process_input();
+
+	if (dt < update_usec)
+		return;
+
+	// it is time to run our update loop
+	last_micros = now;
+	target_steps += update_steps;
+	if (target_steps > 4096)
+		target_steps -= 4096;
+	delta = servo_delta(target_steps, current_steps);
+
+	if (delta < 0)
+	{
+		// we overshot? don't do anything this cycle
+		Serial.print("OVERSHOT ");
+		Serial.print(target_steps);
+		Serial.print(" < ");
+		Serial.println(current_steps);
+		return;
+	}
+
+	// start the servo going towards our new target
+/*
+	Serial.print(delta);
+	Serial.print("= ");
+	Serial.print(target_steps);
+	Serial.print(" - ");
+	Serial.println(current_steps);
+*/
+	servo_start();
 }
