@@ -1,7 +1,25 @@
 /*
  * Use the wheel mode to generate very low speed rotations.
+ * Since the servo position command mode doesn't allow wrapping, this uses the
+ * wheel mode to move the servo a little bit each time step.
  */
 #include <SCServo.h>
+#include <WiFi.h>
+
+#if 0
+unsigned long update_usec = 1000000; // 1 Hz
+float update_steps = 4096.0 / (20*60); // 1 rev every 20 minutes
+#else
+#define UPDATE_SEC 10
+unsigned long update_usec = UPDATE_SEC * 1000000;
+float update_steps = 4096.0 / (20*60/UPDATE_SEC); // 1 rev every 20 minutes
+#endif
+int speed = 10;
+
+const char * ssid = "XXXX";
+const char * password = "YYYY";
+const char * ntp_server = "pool.ntp.org";
+
 
 // Define the correct serial port for your target board
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -21,7 +39,6 @@ SMS_STS st; // Servo control object
 
 const int servo_id = 1;
 int running = 0;
-int speed = 500;
 
 void servo_stop()
 {
@@ -54,10 +71,7 @@ int servo_delta(short target, short current)
 }
 
 unsigned long last_micros = 0;
-unsigned long update_usec = 1000000; // 1 Hz
-//float update_steps = 4096.0 / 60; // 1 RPM
-float update_steps = 4096.0 / (20*60); // 1 rev every 20 minutes
-float target_steps = 0;
+float target_steps = -1;
 
 
 void setup()
@@ -78,6 +92,19 @@ void setup()
 	target_steps = servo_pos();
 	Serial.println(target_steps);
 	last_micros = micros();
+
+#ifdef CONFIG_USE_WIFI
+	WiFi.begin(ssid, password);
+	while (WiFi.status() != WL_CONNECTED)
+	{
+		delay(500);
+		Serial.print(".");
+	}
+	Serial.println(WiFi.localIP());
+
+	configTime(0, 0, ntp_server);
+#endif
+	
 }
 
 void process_input()
@@ -86,10 +113,27 @@ void process_input()
 	input.trim(); // Remove extra spaces or newlines
 
 	if (('0' <= input[0] && input[0] <= '9') || input[0] == '-') {
-		int value = input.toInt();
+		float value = input.toFloat();
 		Serial.print("speed ");
 		Serial.println(value);
-		update_steps = value;
+		
+		if (value == 0)
+		{
+			servo_stop();
+			target_steps = -1;
+		} else {
+			servo_start();
+			st.WriteSpe(servo_id, value);
+			running = 2;
+		}
+	} else
+	if (input[0] == '?') {
+		Serial.print(servo_pos());
+		Serial.print(" ");
+		Serial.print(update_steps);
+		Serial.print(" @ ");
+		Serial.print(update_usec);
+		Serial.println();
 	} else {
 		Serial.println("unable to parse speed");
 	}
@@ -103,7 +147,7 @@ void loop()
 	const unsigned long dt = now - last_micros;
 
 	int delta = servo_delta(target_steps, current_steps);
-	if (running)
+	if (running == 1)
 	{
 		// don't process any input while we are running
 		// stop once we are close to our target
@@ -124,14 +168,37 @@ void loop()
 	if (Serial.available())
 		process_input();
 
-	if (dt < update_usec)
+	if (dt < update_usec || running == 2)
 		return;
 
 	// it is time to run our update loop
 	last_micros = now;
+	if (update_steps == 0)
+		return;
+
+#if 1
+	// initialize the target from our current steps
+	if (target_steps == -1)
+		target_steps = current_steps;
+
 	target_steps += update_steps;
 	if (target_steps > 4096)
 		target_steps -= 4096;
+#else
+	struct tm timeinfo;
+	getLocalTime(&timeinfo);
+	int seconds_past_twenty = (timeinfo.tm_min % 20) * 60 + timeinfo.tm_sec;
+	target_steps = (seconds_past_twenty * 4096) / (60 * 20);
+
+	Serial.print(timeinfo.tm_min);
+	Serial.print(":");
+	Serial.print(timeinfo.tm_sec);
+	Serial.print("=");
+	Serial.print(seconds_past_twenty);
+	Serial.print(" => ");
+	Serial.println(target_steps);
+#endif
+	
 	delta = servo_delta(target_steps, current_steps);
 
 	if (delta < 0)
